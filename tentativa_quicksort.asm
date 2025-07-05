@@ -21,14 +21,14 @@
 
 .data
 filename:        .asciiz "entrada.txt"
-buffer:          .space 2048
+buffer:          .space 10000
 newline:         .asciiz "\n"
 float_sep:       .asciiz " "
-buffer_saida:    .space 2048      # string final a ser escrita no arquivo
-buffer_temp:     .space 64        # string temporaria para cada numero
+buffer_saida:    .space 10000      # string final a ser escrita no arquivo
+buffer_temp:     .space 100        # string temporaria para cada numero
 
-vetor_entrada:   .space 400       # ate 100 floats
-vetor_saida:     .space 400
+vetor_entrada:   .space 10000       # ate 1000 floats
+vetor_saida:     .space 10000
 
 .text
 .globl main
@@ -38,15 +38,22 @@ vetor_saida:     .space 400
 # Funcao principal: inicializa ponteiros, chama leitura, impressao e escrita
 # -------------------------------------------------------------
 main:
-    addi $sp, $sp, -4
-    sw $ra, 0($sp)
+    
+    li $sp, 0x10040000      # reserva espaço para a pilha
 
     la $s1, vetor_entrada
     la $s2, vetor_saida
 
     jal preparar_entrada     # leitura e parse
+    li $v0, 1
+    move $a0, $s3
+    syscall
+    li $v0, 4
+    la $a0, newline
+    syscall                  # imprime nova linha
     jal imprimir             # imprime os valores lidos
-    move $s2, $s1            # ALTERAR!!!!!!!!!!
+    #jal prepara_quicksort    # faz tudo para chamar o quicksort
+    add $s2, $s1, $zero      # $s2 aponta para o vetor ordenado (Teste)
     jal escrever             # escreve no final do arquivo
 
     lw $ra, 0($sp)
@@ -453,4 +460,118 @@ copy_pad:
     bgtz $t8, copy_pad
 
     move $v0, $a1
+    jr $ra
+# -------------------------------------------------------------
+# prepara_quicksort:
+# Prepara os argumentos e realiza a chamada inicial para quicksort.
+# Utiliza o vetor de entrada em $s1 e o número de elementos em $s3.
+# Após a ordenação in-place, configura $s2 para apontar para o vetor ordenado.
+# -------------------------------------------------------------    
+prepara_quicksort:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+
+    add $a0, $s1, $zero      # base
+    li  $t0, 0
+    add $a1, $t0, $zero      # início = 0
+    add $a2, $s3, $zero
+    addi $a2, $a2, -1        # fim = n - 1
+
+    jal quicksort
+    add $s2, $s1, $zero      # $s2 aponta para o vetor ordenado
+
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+
+# -------------------------------------------------------------
+# quicksort:
+# Implementação recursiva do algoritmo quicksort in-place.
+# Argumentos:
+#   $a0 - ponteiro para vetor de floats
+#   $a1 - índice de início
+#   $a2 - índice de fim
+# Se inicio < fim, escolhe o último elemento como pivô e
+# reorganiza o vetor em torno dele, chamando quicksort para
+# as duas partições resultantes.
+# -------------------------------------------------------------
+quicksort:
+    # aloca espaço para $ra, $a0, $a1, $a2
+    addi $sp, $sp, -16
+    sw $ra, 12($sp)
+    sw $a0, 8($sp)
+    sw $a1, 4($sp)
+    sw $a2, 0($sp)
+
+    # if (inicio >= fim) return
+    slt $t0, $a1, $a2
+    bne $t0, $zero, continue_qs
+    j quick_return
+
+continue_qs:
+    #### pivo = vetor[fim]
+    sll $t1, $a2, 2          # offset = fim * 4
+    add $t2, $a0, $t1
+    lwc1 $f0, 0($t2)         # f0 = pivô
+
+    #### i = inicio - 1
+    addi $t3, $a1, -1        # i
+
+    #### j = inicio
+    add $t4, $a1, $zero      # j
+
+qs_loop:
+    # if (j >= fim) break
+    slt $t5, $t4, $a2
+    beq $t5, $zero, qs_loop_end
+
+    # vetor[j] <= pivo
+    sll $t6, $t4, 2
+    add $t7, $a0, $t6
+    lwc1 $f2, 0($t7)
+    c.le.s $f2, $f0
+    bc1f skip_swap
+
+    # i++
+    addi $t3, $t3, 1
+
+    # swap vetor[i] e vetor[j]
+    sll $t8, $t3, 2
+    add $t9, $a0, $t8
+    lwc1 $f4, 0($t9)
+    swc1 $f2, 0($t9)     # vetor[i] = vetor[j]
+    swc1 $f4, 0($t7)     # vetor[j] = temp
+
+skip_swap:
+    addi $t4, $t4, 1     # j++
+    j qs_loop
+
+qs_loop_end:
+    # swap vetor[i+1] e vetor[fim]
+    addi $t3, $t3, 1
+    sll $t6, $t3, 2
+    add $t7, $a0, $t6    # vetor[i+1]
+    sll $t8, $a2, 2
+    add $t9, $a0, $t8    # vetor[fim]
+
+    lwc1 $f6, 0($t7)
+    lwc1 $f8, 0($t9)
+    swc1 $f8, 0($t7)
+    swc1 $f6, 0($t9)
+
+    #### chamada recursiva: quicksort(vetor, inicio, i)
+    lw $a0, 8($sp)         # base
+    lw $a1, 4($sp)         # inicio
+    add $a2, $t3, $zero    # i
+    jal quicksort
+
+    #### chamada recursiva: quicksort(vetor, i+2, fim)
+    lw $a0, 8($sp)
+    addi $a1, $t3, 2
+    lw $a2, 0($sp)         # fim
+    jal quicksort
+
+quick_return:
+    lw $ra, 12($sp)
+    addi $sp, $sp, 16
     jr $ra

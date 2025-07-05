@@ -44,6 +44,27 @@ void imprimir() {
     printf("\n");
 }
 
+void quicksort(float *vetor, int inicio, int fim) {
+    if (inicio < fim) {
+        float pivo = vetor[fim];
+        int i = inicio - 1;
+        for (int j = inicio; j < fim; j++) {
+            if (vetor[j] <= pivo) {
+                i++;
+                float temp = vetor[i];
+                vetor[i] = vetor[j];
+                vetor[j] = temp;
+            }
+        }
+        float temp = vetor[i + 1];
+        vetor[i + 1] = vetor[fim];
+        vetor[fim] = temp;
+
+        quicksort(vetor, inicio, i);
+        quicksort(vetor, i + 2, fim);
+    }
+}
+
 int main() {
     preparar_entrada();
     imprimir();
